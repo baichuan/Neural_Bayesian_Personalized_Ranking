@@ -2,6 +2,7 @@
 Neural Bayesian Personalized Ranking
 embedding layer + one hidden layer with relu activation function
 output layer is BPR loss function
+add batch normalization module
 """
 import numpy as np
 import tensorflow as tf
@@ -125,6 +126,8 @@ def nbpr(user_count, item_count, L, M, regulation_rate, learning_rate):
     u = tf.placeholder(tf.int32, [None])
     i = tf.placeholder(tf.int32, [None])
     j = tf.placeholder(tf.int32, [None])
+    # the behavior of batch normalization is different between training and test phase
+    phase = tf.placeholder(tf.bool, name = 'phase')
 
     # embedding layer
     user_emb_w = tf.Variable(tf.random_normal([user_count+1, L], stddev = 0.01),
@@ -143,11 +146,15 @@ def nbpr(user_count, item_count, L, M, regulation_rate, learning_rate):
     u_emb = tf.nn.embedding_lookup(user_emb_w, u)
     i_emb = tf.nn.embedding_lookup(item_emb_w, i)
     j_emb = tf.nn.embedding_lookup(item_emb_w, j)
-
     Y11 = tf.nn.relu(tf.matmul(u_emb, W11) + B11)
+    Y11 = tf.contrib.layers.batch_norm(Y11, center = True, scale = True,
+                                       is_training = phase)
     Y12 = tf.nn.relu(tf.matmul(i_emb, W12) + B12)
+    Y12 = tf.contrib.layers.batch_norm(Y12, center = True, scale = True,
+                                       is_training = phase)
     Y13 = tf.nn.relu(tf.matmul(j_emb, W12) + B12)
-
+    Y13 = tf.contrib.layers.batch_norm(Y13, center = True, scale = True,
+                                       is_training = phase)
     i_b = tf.nn.embedding_lookup(item_b, i)
     j_b = tf.nn.embedding_lookup(item_b, j)
 
@@ -162,6 +169,7 @@ def nbpr(user_count, item_count, L, M, regulation_rate, learning_rate):
     correct_pred = tf.greater(embedding_score, 0)
     mf_auc = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
+    
     l2_norm = tf.add_n([
             tf.reduce_sum(tf.multiply(u_emb, u_emb)),
             tf.reduce_sum(tf.multiply(i_emb, i_emb)),
@@ -178,14 +186,14 @@ def nbpr(user_count, item_count, L, M, regulation_rate, learning_rate):
     bprloss = regulation_rate * l2_norm - tf.reduce_mean(tf.log(tf.sigmoid(Y)))
     train_op = tf.train.AdagradOptimizer(learning_rate).minimize(bprloss)
 
-    return u, i, j, mf_auc, bprloss, train_op, user_emb_w, item_emb_w, item_b
+    return u, i, j, phase, mf_auc, bprloss, train_op, user_emb_w, item_emb_w, item_b
 
 
 def run_nbpr(user_count, item_count, user_ratings, user_ratings_test,
              L, M, regulation_rate, learning_rate, batch_size):
 
     with tf.Session() as session:
-        u, i, j, mf_auc, bprloss, train_op, user_emb_w, item_emb_w, item_b = \
+        u, i, j, phase, mf_auc, bprloss, train_op, user_emb_w, item_emb_w, item_b = \
                 nbpr(user_count, item_count, L, M, regulation_rate, learning_rate)
         session.run(tf.global_variables_initializer())
         for epoch in xrange(1, 11):
@@ -194,7 +202,7 @@ def run_nbpr(user_count, item_count, user_ratings, user_ratings_test,
                 uij = generate_train_batch(user_ratings, user_ratings_test, item_count, batch_size)
 
                 _bprloss, train_opt = session.run([bprloss, train_op],
-                                          feed_dict={u:uij[:,0], i:uij[:,1], j:uij[:,2]})
+                                          feed_dict={u:uij[:,0], i:uij[:,1], j:uij[:,2], phase: 1})
 
                 _batch_bprloss += _bprloss
 
@@ -208,7 +216,7 @@ def run_nbpr(user_count, item_count, user_ratings, user_ratings_test,
             user_mat, item_mat, item_bias = session.run([user_emb_w, item_emb_w, item_b])
             for t_uij, uij_list in generate_test_batch(user_ratings, user_ratings_test, item_count):
 
-                _auc = session.run(mf_auc, feed_dict={u:t_uij[:,0], i:t_uij[:,1], j:t_uij[:,2]})
+                _auc = session.run(mf_auc, feed_dict={u:t_uij[:,0], i:t_uij[:,1], j:t_uij[:,2], phase:0})
                 _auc_sum += _auc
 
                 _hr, _ndcg = eval_one_rating(user_mat, item_mat, item_bias, uij_list[0], uij_list[1], uij_list[2])
