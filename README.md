@@ -1,10 +1,10 @@
 # Bayesian Personalized Ranking Neural Network
-This repository provides a tensorflow implementation of Neural Bayesian Personalized Ranking for top-N item recommendation. 
+This repository provides a tensorflow implementation of Neural Bayesian Personalized Ranking from implicit feedback for top-N item recommendation. 
 ## Pre-Requisite
 
 * [Python 2.7](https://www.python.org/) 
 * [Numpy](http://www.numpy.org/)
-* [Tensorflow > 1.3](https://www.tensorflow.org/)
+* [Tensorflow 1.3](https://www.tensorflow.org/)
 
 ### Basic Usage
 
